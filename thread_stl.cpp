@@ -32,7 +32,6 @@ namespace mb::thread::intf
 
   void initialize()
   {
-    // Initialization logic if needed
   }
 
   mb::thread::TaskHandle create_task( const mb::thread::TaskConfig &cfg )
