@@ -10,7 +10,7 @@
 
 #include <cstddef>
 #include <condition_variable>
-#include <mbedutils/thread.hpp>
+#include <mbedutils/threading.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
