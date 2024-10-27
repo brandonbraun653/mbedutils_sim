@@ -8,6 +8,7 @@
  *  2024 | Brandon Braun | brandonbraun653@protonmail.com
  *****************************************************************************/
 
+#include "mbedutils/drivers/threading/thread.hpp"
 #include <cstddef>
 #include <condition_variable>
 #include <mbedutils/threading.hpp>
@@ -15,6 +16,93 @@
 #include <stdexcept>
 #include <thread>
 #include <unordered_map>
+
+
+namespace mb::thread
+{
+  /*---------------------------------------------------------------------------
+  Structures
+  ---------------------------------------------------------------------------*/
+
+  struct STLConfig
+  {
+
+  };
+
+  /*---------------------------------------------------------------------------
+  Classes
+  ---------------------------------------------------------------------------*/
+
+  Task::Task() noexcept : taskId( TASK_ID_INVALID ), taskName( "" ), taskImpl( nullptr ), pimpl( nullptr )
+  {
+  }
+
+
+  Task::~Task()
+  {
+
+  }
+
+
+  Task &Task::operator=( Task &&other ) noexcept
+  {
+    this->taskId   = other.taskId;
+    this->taskImpl = other.taskImpl;
+    this->pimpl    = other.pimpl;
+
+    return *this;
+  }
+
+
+  void Task::start()
+  {
+    // check if the task is already started
+
+
+
+    pimpl = new STLConfig();
+    // Send an event to the task to start it.
+  }
+
+
+  void Task::kill()
+  {
+    // Send an event to the task to kill it.
+  }
+
+
+  void Task::join()
+  {
+    // Wait for the task to end (intf?)
+
+    // Lock global mutex, then release the task control block.
+  }
+
+
+  bool Task::joinable()
+  {
+    return false;
+  }
+
+
+  TaskId Task::id() const
+  {
+    return taskId;
+  }
+
+
+  TaskName Task::name() const
+  {
+    return taskName;
+  }
+
+
+  TaskHandle Task::implementation() const
+  {
+    return taskImpl;
+  }
+}    // namespace mb::thread
+
 
 namespace mb::thread::intf
 {
@@ -29,9 +117,15 @@ namespace mb::thread::intf
   Public Functions
   ---------------------------------------------------------------------------*/
 
-  void initialize()
+  void driver_setup()
   {
   }
+
+
+  void driver_teardown()
+  {
+  }
+
 
   mb::thread::TaskHandle create_task( const mb::thread::Task::Config &cfg )
   {
