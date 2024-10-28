@@ -21,15 +21,6 @@
 namespace mb::thread
 {
   /*---------------------------------------------------------------------------
-  Structures
-  ---------------------------------------------------------------------------*/
-
-  struct STLConfig
-  {
-
-  };
-
-  /*---------------------------------------------------------------------------
   Classes
   ---------------------------------------------------------------------------*/
 
@@ -107,11 +98,64 @@ namespace mb::thread
 namespace mb::thread::intf
 {
   /*---------------------------------------------------------------------------
+  Structures
+  ---------------------------------------------------------------------------*/
+
+  struct TaskData
+  {
+    std::thread              thread;
+    std::condition_variable  cv;
+    std::mutex               mutex;
+    mb::thread::Task::Config cfg;
+  };
+
+  /*---------------------------------------------------------------------------
   Private Data
   ---------------------------------------------------------------------------*/
-  static std::unordered_map<mb::thread::TaskHandle, std::thread> task_map;
-  static std::mutex                                              task_map_mutex;
-  static std::condition_variable                                 cv;
+  static std::unordered_map<TaskHandle, TaskId> root_map;
+  static std::unordered_map<TaskId, TaskData> task_map;
+  static std::mutex                                           task_map_mutex;
+  static std::condition_variable                              cv;
+
+  /*---------------------------------------------------------------------------
+  Private Functions
+  ---------------------------------------------------------------------------*/
+
+  /**
+   * @brief Surrogate function to execute the user task.
+   *
+   * This allows us to mimic most RTOS behavior by having the task wait until
+   * it is signaled to start.
+   *
+   * @param id Which task to execute
+   */
+  static void task_func( const mb::thread::TaskId id )
+  {
+    /*-------------------------------------------------------------------------
+    Wait until this particular task configuration has made it into the map.
+    -------------------------------------------------------------------------*/
+    {
+      std::unique_lock<std::mutex> lock( task_map_mutex );
+      while( task_map.find( id ) == task_map.end() )
+      {
+        cv.wait( lock );
+      }
+    }
+
+    /*-------------------------------------------------------------------------
+    Wait for the signal to start
+    -------------------------------------------------------------------------*/
+    auto &task_data = task_map[ id ];
+
+    std::unique_lock<std::mutex> lock2( task_data.mutex );
+    task_data.cv.wait( lock2 );
+
+    /*-------------------------------------------------------------------------
+    Execute the task function
+    -------------------------------------------------------------------------*/
+    task_data.cfg.func( task_data.cfg.user_data );
+
+  }
 
   /*---------------------------------------------------------------------------
   Public Functions
@@ -138,7 +182,7 @@ namespace mb::thread::intf
       }
     };
 
-    std::thread            new_thread( task_func );
+    std::thread
     mb::thread::TaskHandle handle = reinterpret_cast<mb::thread::TaskHandle>( new_thread.native_handle() );
     task_map[ handle ]            = std::move( new_thread );
 
@@ -168,8 +212,17 @@ namespace mb::thread::intf
 
   void start_scheduler()
   {
-    // The C++ STL does not have a scheduler like RTOS. Threads start running as soon as they are created.
-    // This function can be left empty or used to start any additional management tasks.
+    std::lock_guard<std::mutex> lock( task_map_mutex );
+
+    /*-------------------------------------------------------------------------
+    Notify all tasks to start. This is assuming that the tasks are waiting on
+    their respective condition variable.
+    -------------------------------------------------------------------------*/
+    for( auto &task : task_map )
+    {
+      std::unique_lock<std::mutex> lock( task.second.mutex );
+      task.second.cv.notify_one();
+    }
   }
 
   __attribute__( ( weak ) ) void on_stack_overflow()
