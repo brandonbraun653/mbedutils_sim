@@ -8,10 +8,13 @@
  *  2024 | Brandon Braun | brandonbraun653@protonmail.com
  *****************************************************************************/
 
-#include "mbedutils/drivers/threading/thread.hpp"
-#include <cstddef>
+#include <chrono>
 #include <condition_variable>
+#include <cstddef>
+#include <mbedutils/drivers/threading/thread.hpp>
+#include <mbedutils/interfaces/util_intf.hpp>
 #include <mbedutils/threading.hpp>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -21,25 +24,71 @@
 namespace mb::thread
 {
   /*---------------------------------------------------------------------------
+  Structures
+  ---------------------------------------------------------------------------*/
+
+  struct TaskData
+  {
+    TaskHandle                   handle;
+    std::unique_ptr<std::thread> thread;
+    mb::thread::Task::Config     cfg;
+    bool                         kill_request;
+    bool                         start_request;
+  };
+
+  using TaskMap = std::unordered_map<TaskId, std::shared_ptr<TaskData>>;
+
+  /*---------------------------------------------------------------------------
+  Private Data
+  ---------------------------------------------------------------------------*/
+
+  static std::condition_variable s_task_created_cv;
+  static std::mutex              s_module_mutex;
+  static TaskMap                 s_task_internal_map;
+  static size_t                  s_module_ready = ~DRIVER_INITIALIZED_KEY;
+
+  /*---------------------------------------------------------------------------
+  Private Functions
+  ---------------------------------------------------------------------------*/
+
+  /**
+   * @brief Looks up a task in the internal map based on the handle.
+   *
+   * @param handle Handle generated from the create_task() function
+   * @return std::unordered_map<TaskId, TaskData>::iterator
+   */
+  static TaskMap::iterator find_task( const TaskHandle handle )
+  {
+    for( auto it = s_task_internal_map.begin(); it != s_task_internal_map.end(); ++it )
+    {
+      if( it->second->handle == handle )
+      {
+        return it;
+      }
+    }
+
+    return s_task_internal_map.end();
+  }
+
+  /*---------------------------------------------------------------------------
   Classes
   ---------------------------------------------------------------------------*/
 
-  Task::Task() noexcept : taskId( TASK_ID_INVALID ), taskName( "" ), taskImpl( nullptr ), pimpl( nullptr )
+  Task::Task() noexcept : mId( TASK_ID_INVALID ), mName( "" ), mHandle( 0 ), pImpl( nullptr )
   {
   }
 
 
   Task::~Task()
   {
-
   }
 
 
   Task &Task::operator=( Task &&other ) noexcept
   {
-    this->taskId   = other.taskId;
-    this->taskImpl = other.taskImpl;
-    this->pimpl    = other.pimpl;
+    this->mId     = other.mId;
+    this->mHandle = other.mHandle;
+    this->pImpl   = other.pImpl;
 
     return *this;
   }
@@ -47,76 +96,141 @@ namespace mb::thread
 
   void Task::start()
   {
-    // check if the task is already started
+    std::lock_guard<std::mutex> lock( s_module_mutex );
 
+    auto task_iter = find_task( mHandle );
+    if( task_iter == s_task_internal_map.end() )
+    {
+      throw std::runtime_error( "Task not found in map" );
+    }
 
-
-    pimpl = new STLConfig();
-    // Send an event to the task to start it.
+    pImpl = reinterpret_cast<void *>( task_iter->second.get() );
+    task_iter->second->start_request = true;
   }
 
 
   void Task::kill()
   {
-    // Send an event to the task to kill it.
+    auto tsk_data = reinterpret_cast<TaskData *>( pImpl );
+    if( tsk_data )
+    {
+      tsk_data->kill_request = true;
+    }
   }
 
 
+  bool Task::killPending()
+  {
+    auto tsk_data = reinterpret_cast<TaskData *>( pImpl );
+    if( tsk_data )
+    {
+      return tsk_data->kill_request;
+    }
+
+    return false;
+  }
+
   void Task::join()
   {
-    // Wait for the task to end (intf?)
-
-    // Lock global mutex, then release the task control block.
+    auto tsk_data = reinterpret_cast<TaskData *>( pImpl );
+    if( tsk_data && tsk_data->thread->joinable() )
+    {
+      tsk_data->thread->join();
+    }
   }
 
 
   bool Task::joinable()
   {
-    return false;
+    auto tsk_data = reinterpret_cast<TaskData *>( pImpl );
+    if( tsk_data )
+    {
+      return tsk_data->thread->joinable();
+    }
+
+    // By default returning true, I'm assuming that a null implementation
+    // means the thread is already gone and join() can be called safely.
+    return true;
   }
 
 
   TaskId Task::id() const
   {
-    return taskId;
+    return mId;
   }
 
 
   TaskName Task::name() const
   {
-    return taskName;
+    return mName;
   }
 
 
   TaskHandle Task::implementation() const
   {
-    return taskImpl;
+    return mHandle;
   }
+
+  namespace this_thread
+  {
+    TaskName &get_name()
+    {
+      static TaskName empty_name = "";
+      auto id = std::this_thread::get_id();
+
+      std::lock_guard<std::mutex> lock( s_module_mutex );
+      for( auto &task : s_task_internal_map )
+      {
+        if( task.second->thread->get_id() == id )
+        {
+          return task.second->cfg.name;
+        }
+      }
+
+      return empty_name;
+    }
+
+
+    void sleep_for( const size_t timeout )
+    {
+      std::this_thread::sleep_for( std::chrono::milliseconds( timeout ) );
+    }
+
+
+    void sleep_until( const size_t wakeup )
+    {
+      auto wakeup_time = std::chrono::system_clock::time_point(std::chrono::milliseconds(wakeup));
+      std::this_thread::sleep_until(wakeup_time);
+    }
+
+
+    void yield()
+    {
+      std::this_thread::yield();
+    }
+
+
+    TaskId id()
+    {
+      auto id = std::this_thread::get_id();
+
+      std::lock_guard<std::mutex> lock( s_module_mutex );
+      for( auto &task : s_task_internal_map )
+      {
+        if( task.second->thread->get_id() == id )
+        {
+          return task.first;
+        }
+      }
+
+      return TASK_ID_INVALID;
+    }
+  }    // namespace this_thread
 }    // namespace mb::thread
 
 
 namespace mb::thread::intf
 {
-  /*---------------------------------------------------------------------------
-  Structures
-  ---------------------------------------------------------------------------*/
-
-  struct TaskData
-  {
-    std::thread              thread;
-    std::condition_variable  cv;
-    std::mutex               mutex;
-    mb::thread::Task::Config cfg;
-  };
-
-  /*---------------------------------------------------------------------------
-  Private Data
-  ---------------------------------------------------------------------------*/
-  static std::unordered_map<TaskHandle, TaskId> root_map;
-  static std::unordered_map<TaskId, TaskData> task_map;
-  static std::mutex                                           task_map_mutex;
-  static std::condition_variable                              cv;
-
   /*---------------------------------------------------------------------------
   Private Functions
   ---------------------------------------------------------------------------*/
@@ -135,26 +249,34 @@ namespace mb::thread::intf
     Wait until this particular task configuration has made it into the map.
     -------------------------------------------------------------------------*/
     {
-      std::unique_lock<std::mutex> lock( task_map_mutex );
-      while( task_map.find( id ) == task_map.end() )
+      std::unique_lock<std::mutex> lock( s_module_mutex );
+      while( s_task_internal_map.find( id ) == s_task_internal_map.end() )
       {
-        cv.wait( lock );
+        s_task_created_cv.wait( lock );
       }
     }
 
     /*-------------------------------------------------------------------------
-    Wait for the signal to start
+    Wait for the signal to start. This should be coming from the Task::start()
+    method.
     -------------------------------------------------------------------------*/
-    auto &task_data = task_map[ id ];
+    auto task_iter = s_task_internal_map.find( id );
+    if( task_iter == s_task_internal_map.end() )
+    {
+      // We've broken an assumption with the STL map timing. This should never happen.
+      throw std::runtime_error( "Task not found in map" );
+    }
 
-    std::unique_lock<std::mutex> lock2( task_data.mutex );
-    task_data.cv.wait( lock2 );
+    auto &task_data = s_task_internal_map[ id ];
+    while( !task_data->start_request )
+    {
+      std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) );
+    }
 
     /*-------------------------------------------------------------------------
-    Execute the task function
+    Execute the user task, then terminate
     -------------------------------------------------------------------------*/
-    task_data.cfg.func( task_data.cfg.user_data );
-
+    task_data->cfg.func( task_data->cfg.user_data );
   }
 
   /*---------------------------------------------------------------------------
@@ -163,65 +285,102 @@ namespace mb::thread::intf
 
   void driver_setup()
   {
+    if( s_module_ready == DRIVER_INITIALIZED_KEY )
+    {
+      return;
+    }
+
+    s_module_ready = DRIVER_INITIALIZED_KEY;
+    s_task_internal_map.clear();
   }
 
 
   void driver_teardown()
   {
+    if( s_module_ready != DRIVER_INITIALIZED_KEY )
+    {
+      return;
+    }
+
+    /*-------------------------------------------------------------------------
+    Destroy all tasks
+    -------------------------------------------------------------------------*/
+    for( auto &task : s_task_internal_map )
+    {
+      if( task.second->thread->joinable() )
+      {
+        task.second->thread->join();
+      }
+    }
+
+    s_task_internal_map.clear();
+    s_module_ready = ~DRIVER_INITIALIZED_KEY;
   }
 
 
   mb::thread::TaskHandle create_task( const mb::thread::Task::Config &cfg )
   {
-    std::lock_guard<std::mutex> lock( task_map_mutex );
+    std::lock_guard<std::mutex> lock( s_module_mutex );
 
-    auto task_func = [ cfg ]() {
-      if( cfg.func )
-      {
-        cfg.func( cfg.user_data );
-      }
-    };
+    /*-------------------------------------------------------------------------
+    Ensure the task ID is unique
+    -------------------------------------------------------------------------*/
+    if( s_task_internal_map.find( cfg.id ) != s_task_internal_map.end() )
+    {
+      return -1;
+    }
 
-    std::thread
-    mb::thread::TaskHandle handle = reinterpret_cast<mb::thread::TaskHandle>( new_thread.native_handle() );
-    task_map[ handle ]            = std::move( new_thread );
+    /*-------------------------------------------------------------------------
+    Construct the task and wait for it to be ready.
+    -------------------------------------------------------------------------*/
+    s_task_internal_map[ cfg.id ] =
+        std::make_shared<TaskData>( -1, std::make_unique<std::thread>( task_func, cfg.id ), cfg, false, false );
 
-    return handle;
+    do
+    {
+      std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) );
+    } while( s_task_internal_map[ cfg.id ]->thread->get_id() == std::thread::id() );
+
+    s_task_internal_map[ cfg.id ]->handle = s_task_internal_map[ cfg.id ]->thread->native_handle();
+
+    /*-------------------------------------------------------------------------
+    Notify the task that we've injected its configuration into the map.
+    -------------------------------------------------------------------------*/
+    s_task_created_cv.notify_all();
+    std::this_thread::sleep_for( std::chrono::milliseconds( 10 ) );
+
+    return s_task_internal_map[ cfg.id ]->handle;
   }
 
   void destroy_task( mb::thread::TaskHandle task )
   {
-    std::lock_guard<std::mutex> lock( task_map_mutex );
+    std::lock_guard<std::mutex> lock( s_module_mutex );
 
-    auto it = task_map.find( task );
-    if( it != task_map.end() )
+    auto iter = find_task( task );
+    if( iter != s_task_internal_map.end() )
     {
-      if( it->second.joinable() )
+      iter->second->kill_request = true;
+
+      if( iter->second->thread->joinable() )
       {
-        it->second.join();
+        iter->second->thread->join();
       }
-      task_map.erase( it );
+
+      s_task_internal_map.erase( iter );
     }
   }
 
   void set_affinity( mb::thread::TaskHandle task, size_t coreId )
   {
     // Setting thread affinity is platform-specific and not directly supported by the C++ STL.
-    // This function can be implemented using platform-specific APIs if needed.
   }
 
   void start_scheduler()
   {
-    std::lock_guard<std::mutex> lock( task_map_mutex );
-
-    /*-------------------------------------------------------------------------
-    Notify all tasks to start. This is assuming that the tasks are waiting on
-    their respective condition variable.
-    -------------------------------------------------------------------------*/
-    for( auto &task : task_map )
+    std::lock_guard<std::mutex> lock( s_module_mutex );
+    for( auto &task : s_task_internal_map )
     {
-      std::unique_lock<std::mutex> lock( task.second.mutex );
-      task.second.cv.notify_one();
+      task.second->start_request = true;
     }
   }
 
