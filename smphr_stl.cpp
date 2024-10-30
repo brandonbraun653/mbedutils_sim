@@ -101,14 +101,17 @@ namespace mb::osal
   bool tryAcquireSmphr( mb_smphr_t &s, const size_t timeout )
   {
     auto start = std::chrono::steady_clock::now();
-    while( std::chrono::steady_clock::now() - start < std::chrono::milliseconds( timeout ) )
+    do
     {
       if( static_cast<SemaphoreWrapper *>( s )->smphr.try_acquire() )
       {
         return true;
       }
+
       std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) );
-    }
+
+    } while( std::chrono::steady_clock::now() - start < std::chrono::milliseconds( timeout ) );
+
     return false;
   }
 }    // namespace mb::osal
