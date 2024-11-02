@@ -1,6 +1,6 @@
 /******************************************************************************
  *  File Name:
- *    smphr_stl.cpp
+ *    sim_smphr.cpp
  *
  *  Description:
  *    Implementation of the semaphore interface using the C++ standard library

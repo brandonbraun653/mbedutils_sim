@@ -76,6 +76,7 @@ namespace mb::thread
 
   Task::Task() noexcept : mId( TASK_ID_INVALID ), mName( "" ), mHandle( 0 ), pImpl( nullptr )
   {
+    mName.clear();
   }
 
 
@@ -84,9 +85,19 @@ namespace mb::thread
   }
 
 
+  Task::Task( Task &&other ) noexcept
+  {
+    this->mId     = other.mId;
+    this->mName   = other.mName;
+    this->mHandle = other.mHandle;
+    this->pImpl   = other.pImpl;
+  }
+
+
   Task &Task::operator=( Task &&other ) noexcept
   {
     this->mId     = other.mId;
+    this->mName   = other.mName;
     this->mHandle = other.mHandle;
     this->pImpl   = other.pImpl;
 
@@ -173,9 +184,8 @@ namespace mb::thread
 
   namespace this_thread
   {
-    TaskName &get_name()
+    TaskName get_name()
     {
-      static TaskName empty_name = "";
       auto id = std::this_thread::get_id();
 
       std::lock_guard<std::mutex> lock( s_module_mutex );
@@ -187,7 +197,7 @@ namespace mb::thread
         }
       }
 
-      return empty_name;
+      return "";
     }
 
 
@@ -318,7 +328,7 @@ namespace mb::thread::intf
   }
 
 
-  mb::thread::TaskHandle create_task( const mb::thread::Task::Config &cfg )
+  mb::thread::TaskHandle create_task( mb::thread::Task::Config &cfg )
   {
     std::lock_guard<std::mutex> lock( s_module_mutex );
 

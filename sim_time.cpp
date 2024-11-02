@@ -1,6 +1,6 @@
 /******************************************************************************
  *  File Name:
- *    time_stl.cpp
+ *    sim_time.cpp
  *
  *  Description:
  *    STL implementation of the time interface

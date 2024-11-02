@@ -1,6 +1,6 @@
 /******************************************************************************
  *  File Name:
- *    mutex_stl.cpp
+ *    sim_mutex.cpp
  *
  *  Description:
  *    Implementation of the mutex interface using the C++ standard library
