@@ -115,7 +115,7 @@ namespace mb::thread
       throw std::runtime_error( "Task not found in map" );
     }
 
-    pImpl = reinterpret_cast<void *>( task_iter->second.get() );
+    pImpl                            = reinterpret_cast<void *>( task_iter->second.get() );
     task_iter->second->start_request = true;
   }
 
@@ -143,24 +143,37 @@ namespace mb::thread
 
   void Task::join()
   {
+    /*-------------------------------------------------------------------------
+    Perform join on the underlying std::thread object
+    -------------------------------------------------------------------------*/
     auto tsk_data = reinterpret_cast<TaskData *>( pImpl );
     if( tsk_data && tsk_data->thread->joinable() )
     {
       tsk_data->thread->join();
     }
+
+    /*-------------------------------------------------------------------------
+    Clean up the thread's resources with mbedutils
+    -------------------------------------------------------------------------*/
+    mb::thread::destroy( this );
   }
 
 
   bool Task::joinable()
   {
+    /*-------------------------------------------------------------------------
+    Check the underlying implementation if it's joinable
+    -------------------------------------------------------------------------*/
     auto tsk_data = reinterpret_cast<TaskData *>( pImpl );
     if( tsk_data )
     {
       return tsk_data->thread->joinable();
     }
 
-    // By default returning true, I'm assuming that a null implementation
-    // means the thread is already gone and join() can be called safely.
+    /*-------------------------------------------------------------------------
+    By default returning true, I'm assuming that a null implementation means
+    the thread is already gone and join() can be called safely.
+    -------------------------------------------------------------------------*/
     return true;
   }
 
@@ -174,12 +187,6 @@ namespace mb::thread
   TaskName Task::name() const
   {
     return mName;
-  }
-
-
-  TaskHandle Task::implementation() const
-  {
-    return mHandle;
   }
 
   namespace this_thread
@@ -209,8 +216,8 @@ namespace mb::thread
 
     void sleep_until( const size_t wakeup )
     {
-      auto wakeup_time = std::chrono::system_clock::time_point(std::chrono::milliseconds(wakeup));
-      std::this_thread::sleep_until(wakeup_time);
+      auto wakeup_time = std::chrono::system_clock::time_point( std::chrono::milliseconds( wakeup ) );
+      std::this_thread::sleep_until( wakeup_time );
     }
 
 
@@ -362,6 +369,7 @@ namespace mb::thread::intf
     return s_task_internal_map[ cfg.id ]->handle;
   }
 
+
   void destroy_task( mb::thread::TaskHandle task )
   {
     std::lock_guard<std::mutex> lock( s_module_mutex );
@@ -380,10 +388,12 @@ namespace mb::thread::intf
     }
   }
 
+
   void set_affinity( mb::thread::TaskHandle task, size_t coreId )
   {
     // Setting thread affinity is platform-specific and not directly supported by the C++ STL.
   }
+
 
   void start_scheduler()
   {
@@ -394,20 +404,24 @@ namespace mb::thread::intf
     }
   }
 
+
   __attribute__( ( weak ) ) void on_stack_overflow()
   {
     throw std::runtime_error( "Stack overflow detected" );
   }
+
 
   __attribute__( ( weak ) ) void on_malloc_failed()
   {
     throw std::runtime_error( "Memory allocation failed" );
   }
 
+
   __attribute__( ( weak ) ) void on_idle()
   {
     // Default implementation does nothing
   }
+
 
   __attribute__( ( weak ) ) void on_tick()
   {
