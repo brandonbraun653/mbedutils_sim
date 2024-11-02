@@ -29,7 +29,6 @@ namespace mb::thread
 
   struct TaskData
   {
-    TaskHandle                   handle;
     std::unique_ptr<std::thread> thread;
     mb::thread::Task::Config     cfg;
     bool                         kill_request;
@@ -52,16 +51,16 @@ namespace mb::thread
   ---------------------------------------------------------------------------*/
 
   /**
-   * @brief Looks up a task in the internal map based on the handle.
+   * @brief Looks up a task in the internal map based on the id.
    *
-   * @param handle Handle generated from the create_task() function
+   * @param id ID returned from the create_task() function
    * @return std::unordered_map<TaskId, TaskData>::iterator
    */
-  static TaskMap::iterator find_task( const TaskHandle handle )
+  static TaskMap::iterator find_task( const TaskId id )
   {
     for( auto it = s_task_internal_map.begin(); it != s_task_internal_map.end(); ++it )
     {
-      if( it->second->handle == handle )
+      if( it->second->cfg.id == id )
       {
         return it;
       }
@@ -335,7 +334,7 @@ namespace mb::thread::intf
   }
 
 
-  mb::thread::TaskHandle create_task( mb::thread::Task::Config &cfg )
+  mb::thread::TaskId create_task( mb::thread::Task::Config &cfg )
   {
     std::lock_guard<std::mutex> lock( s_module_mutex );
 
@@ -351,14 +350,12 @@ namespace mb::thread::intf
     Construct the task and wait for it to be ready.
     -------------------------------------------------------------------------*/
     s_task_internal_map[ cfg.id ] =
-        std::make_shared<TaskData>( -1, std::make_unique<std::thread>( task_func, cfg.id ), cfg, false, false );
+        std::make_shared<TaskData>( std::make_unique<std::thread>( task_func, cfg.id ), cfg, false, false );
 
     do
     {
       std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) );
     } while( s_task_internal_map[ cfg.id ]->thread->get_id() == std::thread::id() );
-
-    s_task_internal_map[ cfg.id ]->handle = s_task_internal_map[ cfg.id ]->thread->native_handle();
 
     /*-------------------------------------------------------------------------
     Notify the task that we've injected its configuration into the map.
@@ -366,11 +363,11 @@ namespace mb::thread::intf
     s_task_created_cv.notify_all();
     std::this_thread::sleep_for( std::chrono::milliseconds( 10 ) );
 
-    return s_task_internal_map[ cfg.id ]->handle;
+    return cfg.id;
   }
 
 
-  void destroy_task( mb::thread::TaskHandle task )
+  void destroy_task( mb::thread::TaskId task )
   {
     std::lock_guard<std::mutex> lock( s_module_mutex );
 
@@ -389,7 +386,7 @@ namespace mb::thread::intf
   }
 
 
-  void set_affinity( mb::thread::TaskHandle task, size_t coreId )
+  void set_affinity( mb::thread::TaskId task, size_t coreId )
   {
     // Setting thread affinity is platform-specific and not directly supported by the C++ STL.
   }
