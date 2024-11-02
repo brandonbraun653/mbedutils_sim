@@ -215,7 +215,8 @@ namespace mb::thread
 
     void sleep_until( const size_t wakeup )
     {
-      auto wakeup_time = std::chrono::system_clock::time_point( std::chrono::milliseconds( wakeup ) );
+      auto now = std::chrono::system_clock::now();
+      auto wakeup_time = now + std::chrono::milliseconds( wakeup );
       std::this_thread::sleep_until( wakeup_time );
     }
 
