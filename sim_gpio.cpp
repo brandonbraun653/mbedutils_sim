@@ -31,6 +31,7 @@ namespace mb::hw::gpio::intf
 
   bool init( const mb::hw::gpio::PinConfig &config )
   {
+    return true;
   }
 
 
