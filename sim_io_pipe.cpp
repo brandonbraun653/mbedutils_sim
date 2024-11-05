@@ -12,10 +12,9 @@
 Includes
 -----------------------------------------------------------------------------*/
 #include "sim_io_pipe.hpp"
-#include "mbedutils/drivers/logging/logging_macros.hpp"
 #include "sim_queue.hpp"
-#include <iostream>
 #include <mbedutils/logging.hpp>
+#include <iostream>
 
 namespace mb::hw::sim
 {
@@ -51,14 +50,11 @@ namespace mb::hw::sim
       running_        = true;
       receive_thread_ = std::thread( &BidirectionalPipe::receiveLoop, this );
       send_thread_    = std::thread( &BidirectionalPipe::sendLoop, this );
-
-      std::cout << "ZMQ pipe started: " << endpoint_.c_str() << std::endl;
-
       return true;
     }
     catch( const zmq::error_t &e )
     {
-      std::cerr << "Failed to start ZMQ: " << e.what() << std::endl;
+      std::cerr << endpoint_ << ": Failed to start ZMQ: " << e.what() << std::endl;
       return false;
     }
   }
@@ -85,8 +81,8 @@ namespace mb::hw::sim
 
   void BidirectionalPipe::write( const std::vector<uint8_t> &data )
   {
-    std::cout << "Writing data to pipe: " << data.size() << " bytes" << std::endl;
     send_queue_.push( data );
+    // std::cout << endpoint_ << ": TX " << data.size() << " bytes" << std::endl;
   }
 
 
@@ -112,7 +108,8 @@ namespace mb::hw::sim
           zmq::message_t message;
           if( socket_.recv( message ) )
           {
-            std::cout << "Received data from pipe: " << message.size() << " bytes" << std::endl;
+            // std::cout << endpoint_ << ": RX " << message.size() << " bytes" << std::endl;
+
             if( receive_callback_ )
             {
               std::vector<uint8_t> data( static_cast<uint8_t *>( message.data() ),
@@ -126,7 +123,7 @@ namespace mb::hw::sim
       {
         if( running_ )
         {
-          std::cerr << "Receive error: " << e.what() << std::endl;
+          std::cerr << endpoint_ << ": Receive error: " << e.what() << std::endl;
         }
       }
     }
@@ -146,7 +143,7 @@ namespace mb::hw::sim
         }
         catch( const zmq::error_t &e )
         {
-          std::cerr << "Send error: " << e.what() << std::endl;
+          std::cerr << endpoint_ << ": Send error: " << e.what() << std::endl;
         }
       }
     }
