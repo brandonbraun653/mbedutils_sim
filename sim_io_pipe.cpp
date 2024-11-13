@@ -38,6 +38,9 @@ namespace mb::hw::sim
   {
     try
     {
+      /*-----------------------------------------------------------------------
+      Bind or connect the socket based on the configuration
+      -----------------------------------------------------------------------*/
       if( should_bind_ )
       {
         socket_.bind( endpoint_ );
@@ -47,6 +50,36 @@ namespace mb::hw::sim
         socket_.connect( endpoint_ );
       }
 
+      /*-----------------------------------------------------------------------
+      Configure the socket for better performance
+      -----------------------------------------------------------------------*/
+      int linger = 0;    // Do not wait for unsent messages to be sent when closing
+      socket_.set( zmq::sockopt::linger, linger );
+
+      int sndhwm = 250;    // Set high water mark for outbound messages
+      socket_.set( zmq::sockopt::sndhwm, sndhwm );
+
+      int rcvhwm = 250;    // Set high water mark for inbound messages
+      socket_.set( zmq::sockopt::rcvhwm, rcvhwm );
+
+      /*-----------------------------------------------------------------------
+      Clear out any old messages that may be lingering
+      -----------------------------------------------------------------------*/
+      zmq::message_t message;
+      while( socket_.recv( message, zmq::recv_flags::dontwait ) )
+      {
+        // Discard the message
+      }
+
+      std::vector<uint8_t> data;
+      while( send_queue_.pop( data ) )
+      {
+        // Discard the message
+      }
+
+      /*-----------------------------------------------------------------------
+      Start the send/receive threads
+      -----------------------------------------------------------------------*/
       running_        = true;
       receive_thread_ = std::thread( &BidirectionalPipe::receiveLoop, this );
       send_thread_    = std::thread( &BidirectionalPipe::sendLoop, this );
