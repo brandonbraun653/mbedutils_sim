@@ -21,7 +21,7 @@ namespace mb::time
   Private Functions
   ---------------------------------------------------------------------------*/
 
-  static inline size_t absolute_system_time_ms()
+  static inline int64_t absolute_system_time_ms()
   {
     return std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::system_clock::now().time_since_epoch() ).count();
   }
@@ -30,15 +30,15 @@ namespace mb::time
   Public Functions
   ---------------------------------------------------------------------------*/
 
-  size_t millis()
+  int64_t millis()
   {
-    static size_t start_time = absolute_system_time_ms();
+    static int64_t start_time = absolute_system_time_ms();
 
     return absolute_system_time_ms() - start_time;
   }
 
 
-  size_t micros()
+  int64_t micros()
   {
     return millis() * 1000;
   }
