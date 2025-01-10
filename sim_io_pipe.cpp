@@ -134,17 +134,16 @@ namespace mb::hw::sim
         zmq::pollitem_t items[] = { { socket_, 0, ZMQ_POLLIN, 0 } };
 
         // Poll with timeout to allow checking running_ flag
-        zmq::poll( items, 1, std::chrono::milliseconds( 100 ) );
+        zmq::poll( items, 1, std::chrono::milliseconds( 10 ) );
 
         if( items[ 0 ].revents & ZMQ_POLLIN )
         {
           zmq::message_t message;
           if( socket_.recv( message ) )
           {
-            // std::cout << endpoint_ << ": RX " << message.size() << " bytes" << std::endl;
-
             if( receive_callback_ )
             {
+              // std::cout << endpoint_ << ": RX " << message.size() << " bytes" << std::endl;
               std::vector<uint8_t> data( static_cast<uint8_t *>( message.data() ),
                                          static_cast<uint8_t *>( message.data() ) + message.size() );
               receive_callback_( data );
