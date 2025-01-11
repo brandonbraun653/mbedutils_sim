@@ -115,7 +115,6 @@ namespace mb::hw::sim
   void BidirectionalPipe::write( const std::vector<uint8_t> &data )
   {
     send_queue_.push( data );
-    // std::cout << endpoint_ << ": TX " << data.size() << " bytes" << std::endl;
   }
 
 
@@ -172,6 +171,7 @@ namespace mb::hw::sim
         try
         {
           socket_.send( zmq::buffer( data ) );
+          // std::cout << endpoint_ << ": TX " << data.size() << " bytes" << std::endl;
         }
         catch( const zmq::error_t &e )
         {
