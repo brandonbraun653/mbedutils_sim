@@ -23,7 +23,14 @@ namespace mb::time
 
   static inline int64_t absolute_system_time_ms()
   {
-    return std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::system_clock::now().time_since_epoch() ).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now().time_since_epoch() )
+        .count();
+  }
+
+  static inline int64_t absolute_system_time_us()
+  {
+    return std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::high_resolution_clock::now().time_since_epoch() )
+        .count();
   }
 
   /*---------------------------------------------------------------------------
@@ -33,14 +40,14 @@ namespace mb::time
   int64_t millis()
   {
     static int64_t start_time = absolute_system_time_ms();
-
     return absolute_system_time_ms() - start_time;
   }
 
 
   int64_t micros()
   {
-    return millis() * 1000;
+    static int64_t start_time = absolute_system_time_us();
+    return absolute_system_time_us() - start_time;
   }
 
 
@@ -55,4 +62,4 @@ namespace mb::time
     std::this_thread::sleep_for( std::chrono::microseconds( val ) );
   }
 
-}  // namespace mb::time
+}    // namespace mb::time
