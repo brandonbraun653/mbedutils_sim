@@ -13,6 +13,8 @@ Includes
 -----------------------------------------------------------------------------*/
 #include "sim_io_pipe.hpp"
 #include "sim_queue.hpp"
+#include "zmq.hpp"
+#include <chrono>
 #include <mbedutils/logging.hpp>
 #include <iostream>
 
@@ -138,7 +140,7 @@ namespace mb::hw::sim
         if( items[ 0 ].revents & ZMQ_POLLIN )
         {
           zmq::message_t message;
-          if( socket_.recv( message ) )
+          if( socket_.recv( message, zmq::recv_flags::dontwait ) )
           {
             if( receive_callback_ )
             {
@@ -166,11 +168,11 @@ namespace mb::hw::sim
     while( running_ )
     {
       std::vector<uint8_t> data;
-      if( send_queue_.pop( data ) )
+      if( send_queue_.pop( data, std::chrono::milliseconds( 1 ) ) )
       {
         try
         {
-          socket_.send( zmq::buffer( data ) );
+          socket_.send( zmq::buffer( data ), zmq::send_flags::dontwait );
           // std::cout << endpoint_ << ": TX " << data.size() << " bytes" << std::endl;
         }
         catch( const zmq::error_t &e )
